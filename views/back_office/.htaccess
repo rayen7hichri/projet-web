@@ -1,0 +1,7 @@
+# Process .html files as PHP
+AddType application/x-httpd-php .html
+
+# Enable mod_rewrite
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+</IfModule>
