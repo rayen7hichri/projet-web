@@ -50,8 +50,9 @@ function showPage(name) {
     updateLoginUI();
   }
   if (name === 'community') {
-    console.log('Community page shown, loading posts');
+    console.log('Community page shown, loading posts and contributors');
     loadPostsFromDB();
+    loadTopContributors();
   }
   
   // Mettre à jour la navbar
@@ -274,6 +275,16 @@ function loadPostsFromDB() {
               `;
             }
             
+            // Add image display if fichier exists
+            let fileSection = '';
+            if (post.fichier) {
+              fileSection = `
+                <div style="margin-top: 12px; border-radius: 6px; overflow: hidden;">
+                  <img src="../../uploads/images/${post.fichier}" alt="Post image" style="max-width: 100%; height: auto; display: block; border-radius: 6px;">
+                </div>
+              `;
+            }
+            
             postsHtml += `
               <div class="forum-post reveal" id="post-${post.id}">
                 <div class="post-header">
@@ -285,9 +296,9 @@ function loadPostsFromDB() {
                 </div>
                 <h4 style="margin: 12px 0 8px 0; color: #333; font-weight: 600;">${post.titre_post}</h4>
                 <p class="post-content">${post.contenu_post}</p>
+                ${fileSection}
                 <div class="post-actions">
-                  <span class="post-action" onclick="showToast('❤️ Aimé !')">❤️ 0</span>
-                  <span class="post-action">💬 0 réponses</span>
+                  <span class="post-action">💬 0 commentaires</span>
                   <span class="post-action" onclick="showToast('🔁 Partage envoyé !')">🔁 Partager</span>
                   ${actionButtons}
                 </div>
@@ -296,10 +307,48 @@ function loadPostsFromDB() {
           });
           
           container.innerHTML = postsHtml;
+          
+          // Load comments for each post
+          result.posts.forEach(post => {
+            loadCommentsForPost(post.id);
+          });
         }
       }
     })
     .catch(err => console.error('Erreur lors du chargement des posts:', err));
+}
+
+// Load top contributors and display in sidebar
+function loadTopContributors() {
+  console.log('loadTopContributors called');
+  
+  fetch('../../index.php?action=get_top_contributors&limit=3')
+    .then(r => r.json())
+    .then(result => {
+      if (result.success && result.contributors) {
+        const container = document.getElementById('top-contributors-list');
+        if (container) {
+          const medals = ['🥇', '🥈', '🥉'];
+          let contributorsHtml = '';
+          
+          result.contributors.forEach((contributor, index) => {
+            const medal = medals[index] || '•';
+            contributorsHtml += `
+              <div style="display: flex; align-items: center; gap: 12px; padding: 8px; background-color: #f5f5f5; border-radius: 8px; font-size: 14px;">
+                <span style="font-size: 18px; min-width: 24px;">${medal}</span>
+                <div style="flex: 1;">
+                  <div style="font-weight: 500; color: #333;">${contributor.nom_auteur}</div>
+                  <div style="font-size: 12px; color: #999;">${contributor.post_count} post${contributor.post_count > 1 ? 's' : ''}</div>
+                </div>
+              </div>
+            `;
+          });
+          
+          container.innerHTML = contributorsHtml;
+        }
+      }
+    })
+    .catch(err => console.error('Erreur lors du chargement des contributeurs:', err));
 }
 
 // Fonction pour calculer le temps écoulé
@@ -319,8 +368,11 @@ function getTimeAgo(date) {
 function showPostModal() {
   document.getElementById('post-title-input').value = '';
   document.getElementById('post-content-input').value = '';
+  document.getElementById('post-file-input').value = '';
   document.getElementById('title-counter').textContent = '0/50';
   document.getElementById('content-counter').textContent = '0/500';
+  document.getElementById('file-info').textContent = '';
+  document.getElementById('file-error-message').style.display = 'none';
   document.getElementById('post-modal-overlay').classList.add('active');
 }
 
@@ -347,6 +399,14 @@ function initPostModal() {
     });
   }
   
+  // Setup file input validation
+  const fileInput = document.getElementById('post-file-input');
+  if (fileInput) {
+    fileInput.addEventListener('change', function() {
+      validateFileInput(this);
+    });
+  }
+  
   // Pour le modal d'édition
   const editTitleInput = document.getElementById('edit-post-title-input');
   const editContentInput = document.getElementById('edit-post-content-input');
@@ -366,6 +426,46 @@ function initPostModal() {
   }
 }
 
+// Image validation function
+function validateFileInput(input) {
+  const fileInfo = document.getElementById('file-info');
+  const errorMsg = document.getElementById('file-error-message');
+  
+  if (!input.files || input.files.length === 0) {
+    fileInfo.textContent = '';
+    errorMsg.style.display = 'none';
+    return true;
+  }
+  
+  const file = input.files[0];
+  const maxSize = 5 * 1024 * 1024; // 5MB
+  const allowedExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+  
+  // Check file size
+  if (file.size > maxSize) {
+    errorMsg.textContent = '❌ Image trop volumineuse (max 5MB)';
+    errorMsg.style.display = 'block';
+    fileInfo.textContent = '';
+    input.value = '';
+    return false;
+  }
+  
+  // Check file extension
+  const extension = file.name.split('.').pop().toLowerCase();
+  if (!allowedExtensions.includes(extension)) {
+    errorMsg.textContent = '❌ Format non autorisé. Acceptés: JPG, PNG, GIF, WEBP';
+    errorMsg.style.display = 'block';
+    fileInfo.textContent = '';
+    input.value = '';
+    return false;
+  }
+  
+  // Success
+  errorMsg.style.display = 'none';
+  fileInfo.textContent = `✅ Image: ${file.name} (${(file.size / 1024).toFixed(1)}KB)`;
+  return true;
+}
+
 function submitPost() {
   const user = getLoggedInUser();
   if (!user) {
@@ -378,6 +478,14 @@ function submitPost() {
     return;
   }
   
+  // Validate file if present
+  const fileInput = document.getElementById('post-file-input');
+  if (fileInput && fileInput.files.length > 0) {
+    if (!validateFileInput(fileInput)) {
+      return;
+    }
+  }
+  
   const titre = document.getElementById('post-title-input').value.trim();
   const contenu = document.getElementById('post-content-input').value.trim();
   
@@ -386,6 +494,11 @@ function submitPost() {
   data.append('nom_auteur', user.prenom + ' ' + user.nom);
   data.append('titre_post', titre);
   data.append('contenu_post', contenu);
+  
+  // Add file if present
+  if (fileInput && fileInput.files.length > 0) {
+    data.append('fichier', fileInput.files[0]);
+  }
   
   // Envoyer au serveur
   fetch('../../index.php?action=create_post', {
@@ -398,6 +511,7 @@ function submitPost() {
       // Recharger les posts depuis la BD
       closePostModal();
       loadPostsFromDB();
+      loadTopContributors();
       showToast('✅ Votre post a été publié !');
     } else {
       showToast('❌ ' + (result.error || 'Erreur lors de la publication'));
@@ -631,7 +745,10 @@ function deletePost(postId) {
         postElement.remove();
       }
       // Recharger les posts au cas où
-      setTimeout(() => loadPostsFromDB(), 500);
+      setTimeout(() => {
+        loadPostsFromDB();
+        loadTopContributors();
+      }, 500);
     } else {
       showToast('❌ ' + (result.error || 'Erreur lors de la suppression'));
     }
@@ -639,6 +756,334 @@ function deletePost(postId) {
   .catch(err => {
     console.error('Fetch error:', err);
     showToast('❌ Erreur réseau');
+  });
+}
+
+// ============================================
+// COMMENTAIRE FUNCTIONS
+// ============================================
+
+let currentCommentingPostId = null;
+
+function openCommentModal(postId) {
+  const user = getLoggedInUser();
+  if (!user) {
+    showToast('❌ Vous devez d\'abord vous connecter');
+    return;
+  }
+  
+  currentCommentingPostId = postId;
+  document.getElementById('comment-content-input').value = '';
+  document.getElementById('comment-counter').textContent = '0/2000';
+  document.getElementById('comment-error-message').style.display = 'none';
+  document.getElementById('comment-modal-overlay').classList.add('active');
+}
+
+function closeCommentModal() {
+  document.getElementById('comment-modal-overlay').classList.remove('active');
+  currentCommentingPostId = null;
+}
+
+function submitComment() {
+  if (!currentCommentingPostId) {
+    showToast('❌ Erreur : ID du post manquant');
+    return;
+  }
+  
+  const user = getLoggedInUser();
+  if (!user) {
+    showToast('❌ Vous devez d\'abord vous connecter');
+    return;
+  }
+  
+  // Validate using validation.js function
+  if (!validateCommentForm()) {
+    return;
+  }
+  
+  const content = document.getElementById('comment-content-input').value.trim();
+  
+  // Prepare data
+  const data = new FormData();
+  data.append('nom_auteur', user.prenom + ' ' + user.nom);
+  data.append('contenu', content);
+  data.append('id_post', currentCommentingPostId);
+  
+  // Send to server
+  fetch('../../index.php?action=create_comment', {
+    method: 'POST',
+    body: data
+  })
+  .then(r => r.json())
+  .then(result => {
+    if (result.success) {
+      closeCommentModal();
+      loadCommentsForPost(currentCommentingPostId);
+      showToast('✅ Commentaire publié !');
+    } else {
+      const errorMsg = document.getElementById('comment-error-message');
+      if (errorMsg) {
+        errorMsg.textContent = result.error || 'Erreur lors de la publication';
+        errorMsg.style.display = 'block';
+      }
+      showToast('❌ ' + (result.error || 'Erreur lors de la publication'));
+    }
+  })
+  .catch(err => {
+    console.error('Fetch error:', err);
+    showToast('❌ Erreur réseau');
+  });
+}
+
+function loadCommentsForPost(postId) {
+  fetch('../../index.php?action=get_comments_by_post&id_post=' + postId)
+    .then(r => r.json())
+    .then(result => {
+      if (result.success) {
+        displayCommentsForPost(postId, result.comments);
+        updateCommentCount(postId, result.count);
+      } else {
+        console.error('Error loading comments:', result.error);
+      }
+    })
+    .catch(err => console.error('Fetch error:', err));
+}
+
+function displayCommentsForPost(postId, comments) {
+  const postElement = document.getElementById('post-' + postId);
+  if (!postElement) return;
+  
+  // Remove existing comments section if present
+  const existingCommentsSection = postElement.querySelector('.comments-section');
+  if (existingCommentsSection) {
+    existingCommentsSection.remove();
+  }
+  
+  // Create comments section
+  let commentsHtml = `
+    <div class="comments-section" style="margin-top: 16px; padding-top: 16px; border-top: 1px solid #eee;">
+      <div style="margin-bottom: 12px;">
+        <button class="btn-primary" style="width: 100%; padding: 8px; font-size: 14px;" onclick="openCommentModal(${postId})">💬 Ajouter un commentaire</button>
+      </div>
+  `;
+  
+  if (comments && comments.length > 0) {
+    commentsHtml += `<div style="font-size: 12px; color: #666; margin-bottom: 12px;">${comments.length} commentaire${comments.length > 1 ? 's' : ''}</div>`;
+    
+    comments.forEach(comment => {
+      const commentDate = new Date(comment.date_commentaire);
+      const timeAgo = getTimeAgo(commentDate);
+      
+      const initials = comment.nom_auteur.split(' ').map(n => n.charAt(0)).join('');
+      const colors = ['#4CAF50', '#1E3A8A', '#F97316', '#8B5CF6', '#EC4899'];
+      const randomColor = colors[Math.floor(Math.random() * colors.length)];
+      
+      const user = getLoggedInUser();
+      // Improved author check with normalization (trim + lowercase)
+      const userFullName = user ? (user.prenom + ' ' + user.nom).trim().toLowerCase() : '';
+      const commentAuthor = comment.nom_auteur.trim().toLowerCase();
+      const isAuthor = user && userFullName === commentAuthor;
+      
+      // Debug logging
+      console.log('Debug - Comment check:', {
+        userFullName: userFullName,
+        commentAuthor: commentAuthor,
+        isAuthor: isAuthor,
+        user: user,
+        comment_nom_auteur: comment.nom_auteur
+      });
+      
+      let actionButtons = '';
+      if (isAuthor) {
+        actionButtons = `
+          <span class="post-action" onclick="editComment(${comment.id_commentaire}, ${postId})" style="cursor: pointer; color: #4CAF50; font-size: 12px; margin-right: 8px;">✏️</span>
+          <span class="post-action" onclick="deleteComment(${comment.id_commentaire}, ${postId})" style="cursor: pointer; color: #dc3545; font-size: 12px;">🗑️</span>
+        `;
+      }
+      
+      commentsHtml += `
+        <div id="comment-${comment.id_commentaire}" style="background: #f9f9f9; padding: 12px; border-radius: 6px; margin-bottom: 10px;">
+          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+            <div class="avatar" style="width: 28px; height: 28px; font-size: 11px; background: linear-gradient(135deg, ${randomColor}, ${randomColor}dd);">${initials}</div>
+            <div style="flex: 1;">
+              <strong style="font-size: 13px;">${comment.nom_auteur}</strong>
+              <span style="color: #999; font-size: 12px; margin-left: 8px;">${timeAgo}</span>
+            </div>
+            ${actionButtons}
+          </div>
+          <p id="comment-text-${comment.id_commentaire}" style="margin: 0; font-size: 13px; color: #333; line-height: 1.4;">${escapeHtml(comment.contenu)}</p>
+        </div>
+      `;
+    });
+  } else {
+    commentsHtml += `<p style="text-align: center; color: #999; font-size: 13px; padding: 12px;">Aucun commentaire pour le moment. Soyez le premier à commenter !</p>`;
+  }
+  
+  commentsHtml += `</div>`;
+  
+  // Insert comments section after post-actions
+  const postActions = postElement.querySelector('.post-actions');
+  if (postActions) {
+    postActions.insertAdjacentHTML('afterend', commentsHtml);
+  }
+}
+
+function updateCommentCount(postId, count) {
+  const postElement = document.getElementById('post-' + postId);
+  if (!postElement) return;
+  
+  const commentAction = postElement.querySelector('.post-action:nth-child(2)');
+  if (commentAction) {
+    commentAction.textContent = `💬 ${count} commentaire${count !== 1 ? 's' : ''}`;
+  }
+}
+
+function deleteComment(commentId, postId) {
+  if (!confirm('Êtes-vous sûr de vouloir supprimer ce commentaire ?')) {
+    return;
+  }
+  
+  const data = new FormData();
+  data.append('comment_id', commentId);
+  
+  fetch('../../index.php?action=delete_comment_' + commentId, {
+    method: 'POST',
+    body: data
+  })
+  .then(r => r.json())
+  .then(result => {
+    if (result.success) {
+      showToast('✅ Commentaire supprimé');
+      loadCommentsForPost(postId);
+    } else {
+      showToast('❌ ' + (result.error || 'Erreur lors de la suppression'));
+    }
+  })
+  .catch(err => {
+    console.error('Fetch error:', err);
+    showToast('❌ Erreur réseau');
+  });
+}
+
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+/**
+ * Edit a comment - make it editable
+ */
+function editComment(commentId, postId) {
+  const commentElement = document.getElementById('comment-' + commentId);
+  if (!commentElement) return;
+  
+  const commentText = document.getElementById('comment-text-' + commentId);
+  if (!commentText) return;
+  
+  const originalContent = commentText.textContent;
+  
+  // Replace text with textarea
+  commentText.innerHTML = `
+    <div style="display: flex; flex-direction: column; gap: 8px;">
+      <textarea id="edit-textarea-${commentId}" style="
+        width: 100%;
+        min-height: 80px;
+        padding: 8px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        font-family: inherit;
+        font-size: 13px;
+        resize: vertical;
+      ">${originalContent}</textarea>
+      <div id="edit-error-${commentId}" style="color: #dc3545; font-size: 12px; display: none;"></div>
+      <div style="display: flex; gap: 8px;">
+        <button class="btn-primary" style="flex: 1; padding: 6px; font-size: 12px;" onclick="saveCommentEdit(${commentId}, ${postId})">💾 Enregistrer</button>
+        <button class="btn-ghost" style="flex: 1; padding: 6px; font-size: 12px; background: #e9ecef;" onclick="cancelCommentEdit(${commentId}, '${originalContent.replace(/'/g, "\\'")}')">✕ Annuler</button>
+      </div>
+    </div>
+  `;
+  
+  // Focus textarea
+  const textarea = document.getElementById('edit-textarea-' + commentId);
+  if (textarea) {
+    textarea.focus();
+    textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+  }
+}
+
+/**
+ * Cancel comment edit
+ */
+function cancelCommentEdit(commentId, originalContent) {
+  const commentText = document.getElementById('comment-text-' + commentId);
+  if (commentText) {
+    commentText.innerHTML = `<p style="margin: 0; font-size: 13px; color: #333; line-height: 1.4;">${escapeHtml(originalContent)}</p>`;
+  }
+}
+
+/**
+ * Save comment edit
+ */
+function saveCommentEdit(commentId, postId) {
+  const textarea = document.getElementById('edit-textarea-' + commentId);
+  const errorDiv = document.getElementById('edit-error-' + commentId);
+  
+  if (!textarea || !errorDiv) return;
+  
+  const newContent = textarea.value.trim();
+  
+  // Clear previous errors
+  errorDiv.style.display = 'none';
+  errorDiv.textContent = '';
+  
+  // Validate content
+  let validationError = '';
+  
+  if (!newContent) {
+    validationError = 'Comment content is required';
+  } else if (newContent.length < 2) {
+    validationError = 'Comment must be at least 2 characters';
+  } else if (!hasNoConsecutiveChars(newContent)) {
+    validationError = 'Comment cannot contain 3+ identical consecutive characters (e.g., "jjj")';
+  } else if (newContent.length > 2000) {
+    validationError = 'Comment must not exceed 2000 characters';
+  }
+  
+  // Show validation error if any
+  if (validationError) {
+    errorDiv.textContent = '❌ ' + validationError;
+    errorDiv.style.display = 'block';
+    return;
+  }
+  
+  // Send update request
+  const user = getLoggedInUser();
+  const nomAuteur = user ? (user.prenom + ' ' + user.nom) : '';
+  
+  const data = new FormData();
+  data.append('contenu', newContent);
+  data.append('nom_auteur', nomAuteur);
+  
+  fetch('../../index.php?action=update_comment_' + commentId, {
+    method: 'POST',
+    body: data
+  })
+  .then(r => r.json())
+  .then(result => {
+    if (result.success) {
+      showToast('✅ Commentaire modifié');
+      loadCommentsForPost(postId);
+    } else {
+      const errorMsg = result.error || 'Erreur lors de la modification';
+      errorDiv.textContent = '❌ ' + errorMsg;
+      errorDiv.style.display = 'block';
+    }
+  })
+  .catch(err => {
+    console.error('Fetch error:', err);
+    errorDiv.textContent = '❌ Erreur réseau';
+    errorDiv.style.display = 'block';
   });
 }
 
@@ -740,7 +1185,9 @@ function toggleMobileMenu() {
   showToast('Menu mobile : utilisez les boutons de navigation !');
 }
 
+// ============================================
 // SCROLL REVEAL
+// ============================================
 function initReveal() {
   const els = document.querySelectorAll('.reveal');
   const obs = new IntersectionObserver((entries) => {

@@ -30,11 +30,14 @@ class Post {
             nom_auteur VARCHAR(255) NOT NULL,
             titre_post VARCHAR(255) NOT NULL,
             contenu_post TEXT NOT NULL,
+            fichier VARCHAR(255) DEFAULT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci";
 
         try {
             $this->conn->exec($sql);
+            // Try to add fichier column if table already exists
+            $this->addFichierColumnIfNeeded();
         } catch (PDOException $e) {
             // Don't throw, just log
             error_log("Post table creation warning: " . $e->getMessage());
@@ -42,14 +45,34 @@ class Post {
     }
 
     /**
-     * Create a new post using PDO prepared statements
-     * @param array $data Post data
+     * Add fichier column if it doesn't exist (for existing tables)
+     */
+    private function addFichierColumnIfNeeded() {
+        try {
+            // Check if column exists
+            $sql = "SHOW COLUMNS FROM {$this->table} LIKE 'fichier'";
+            $stmt = $this->conn->query($sql);
+            $result = $stmt->fetch(PDO::FETCH_ASSOC);
+            
+            // If column doesn't exist, add it
+            if (!$result) {
+                $alterSql = "ALTER TABLE {$this->table} ADD COLUMN fichier VARCHAR(255) DEFAULT NULL AFTER contenu_post";
+                $this->conn->exec($alterSql);
+            }
+        } catch (PDOException $e) {
+            error_log("Post::addFichierColumnIfNeeded warning: " . $e->getMessage());
+        }
+    }
+
+    /**
+     * Create a new post using PDO  (includes nom_auteur, titre_post, contenu_post, fichier)
      * @return array Response
      */
     public function create($data) {
         $nom_auteur = trim($data['nom_auteur'] ?? '');
         $titre_post = trim($data['titre_post'] ?? '');
         $contenu_post = trim($data['contenu_post'] ?? '');
+        $fichier = $data['fichier'] ?? null;
 
         // Validate required fields
         if (empty($nom_auteur) || empty($titre_post) || empty($contenu_post)) {
@@ -78,15 +101,16 @@ class Post {
         }
 
         // Insert post using prepared statement (secure against SQL injection)
-        $insert_sql = "INSERT INTO {$this->table} (nom_auteur, titre_post, contenu_post) 
-                       VALUES (:nom_auteur, :titre_post, :contenu_post)";
+        $insert_sql = "INSERT INTO {$this->table} (nom_auteur, titre_post, contenu_post, fichier) 
+                       VALUES (:nom_auteur, :titre_post, :contenu_post, :fichier)";
 
         try {
             $stmt = $this->conn->prepare($insert_sql);
             $stmt->execute([
                 ':nom_auteur' => $nom_auteur,
                 ':titre_post' => $titre_post,
-                ':contenu_post' => $contenu_post
+                ':contenu_post' => $contenu_post,
+                ':fichier' => $fichier
             ]);
 
             return [
@@ -110,7 +134,7 @@ class Post {
      */
     public function getAll($limit = 50) {
         $limit = intval($limit);
-        $sql = "SELECT id, nom_auteur, titre_post, contenu_post, created_at FROM {$this->table} ORDER BY created_at DESC LIMIT :limit";
+        $sql = "SELECT id, nom_auteur, titre_post, contenu_post, fichier, created_at FROM {$this->table} ORDER BY created_at DESC LIMIT :limit";
         
         try {
             $stmt = $this->conn->prepare($sql);
@@ -247,6 +271,96 @@ class Post {
                 'error' => 'Database error: ' . $e->getMessage(),
                 'code' => 'DB_ERROR'
             ];
+        }
+    }
+
+    /**
+     * Get top contributors (users with most posts)
+     * @param int $limit
+     * @return array Contributors with post count
+     */
+    public function getTopContributors($limit = 3) {
+        $limit = intval($limit);
+        $sql = "SELECT nom_auteur, COUNT(*) as post_count 
+                FROM {$this->table} 
+                GROUP BY nom_auteur 
+                ORDER BY post_count DESC 
+                LIMIT :limit";
+        
+        try {
+            $stmt = $this->conn->prepare($sql);
+            $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+            $stmt->execute();
+            
+            $contributors = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            return $contributors ?: [];
+        } catch (PDOException $e) {
+            error_log("Post::getTopContributors error: " . $e->getMessage());
+            return [];
+        }
+    }
+
+    /**
+     * Get all posts with their associated comments
+     * @param int $limit
+     * @return array Posts with comments nested
+     */
+    public function getAllWithComments($limit = 50) {
+        $limit = intval($limit);
+        
+        try {
+            // Fetch all posts
+            $posts_sql = "SELECT id, nom_auteur, titre_post, contenu_post, fichier, created_at 
+                          FROM {$this->table} 
+                          ORDER BY created_at DESC 
+                          LIMIT :limit";
+            
+            $stmt = $this->conn->prepare($posts_sql);
+            $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+            $stmt->execute();
+            $posts = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            
+            if (empty($posts)) {
+                return [];
+            }
+            
+            // For each post, fetch its comments
+            foreach ($posts as &$post) {
+                $comments_sql = "SELECT id_commentaire, nom_auteur, contenu, date_commentaire, id_post 
+                                FROM commentaire 
+                                WHERE id_post = :id_post 
+                                ORDER BY date_commentaire DESC";
+                
+                $stmt = $this->conn->prepare($comments_sql);
+                $stmt->execute([':id_post' => $post['id']]);
+                $post['comments'] = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            }
+            
+            return $posts;
+        } catch (PDOException $e) {
+            error_log("Post::getAllWithComments error: " . $e->getMessage());
+            return [];
+        }
+    }
+
+    /**
+     * Get comments count for a post
+     * @param int $post_id
+     * @return int Number of comments
+     */
+    public function getCommentCount($post_id) {
+        $post_id = intval($post_id);
+        
+        try {
+            $sql = "SELECT COUNT(*) as count FROM commentaire WHERE id_post = :id_post";
+            $stmt = $this->conn->prepare($sql);
+            $stmt->execute([':id_post' => $post_id]);
+            
+            $result = $stmt->fetch(PDO::FETCH_ASSOC);
+            return $result['count'] ?? 0;
+        } catch (PDOException $e) {
+            error_log("Post::getCommentCount error: " . $e->getMessage());
+            return 0;
         }
     }
 

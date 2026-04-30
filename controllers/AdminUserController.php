@@ -164,8 +164,8 @@ class AdminUserController {
             require_once __DIR__ . '/../models/Post.php';
             $postModel = new Post();
 
-            // Fetch posts
-            $posts = $postModel->getAll(1000); // Get all posts for pagination
+            // Fetch posts with comments
+            $posts = $postModel->getAllWithComments(1000); // Get all posts for pagination
             
             // Paginate posts in PHP
             $totalPosts = count($posts);

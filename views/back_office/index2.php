@@ -26,8 +26,8 @@ $users = $adminUserModel->getAllUsers($limit, $offset, $search);
 $totalUsers = $adminUserModel->getUserCount($search);
 $totalPages = ceil($totalUsers / $limit);
 
-// Fetch posts
-$allPosts = $postModel->getAll(1000);
+// Fetch posts with comments
+$allPosts = $postModel->getAllWithComments(1000);
 $totalPosts = count($allPosts);
 
 // Get statistics
@@ -747,6 +747,7 @@ $stats = $adminUserModel->getUserStatistics();
                             <th class="text-left px-4 py-3 text-sm font-semibold text-on-surface-variant">Title</th>
                             <th class="text-left px-4 py-3 text-sm font-semibold text-on-surface-variant">Author</th>
                             <th class="text-left px-4 py-3 text-sm font-semibold text-on-surface-variant">Content Preview</th>
+                            <th class="text-left px-4 py-3 text-sm font-semibold text-on-surface-variant">Comments</th>
                             <th class="text-left px-4 py-3 text-sm font-semibold text-on-surface-variant">Created Date</th>
                             <th class="text-left px-4 py-3 text-sm font-semibold text-on-surface-variant">Actions</th>
                         </tr>
@@ -770,6 +771,12 @@ $stats = $adminUserModel->getUserStatistics();
                                     <p class="text-on-surface-variant text-sm max-w-sm truncate"><?php echo htmlspecialchars(substr($post['contenu_post'], 0, 50) . '...'); ?></p>
                                 </td>
                                 <td class="px-4 py-3">
+                                    <button onclick="toggleComments(<?php echo $post['id']; ?>)" class="inline-flex items-center gap-2 px-3 py-1 bg-secondary/10 text-secondary rounded-full text-xs font-semibold hover:bg-secondary/20 transition-colors">
+                                        <span class="material-symbols-outlined text-sm">chat</span>
+                                        <span><?php echo count($post['comments'] ?? []); ?></span>
+                                    </button>
+                                </td>
+                                <td class="px-4 py-3">
                                     <p class="text-on-surface-variant text-sm"><?php echo date('M d, Y H:i', strtotime($post['created_at'])); ?></p>
                                 </td>
                                 <td class="px-4 py-3">
@@ -783,10 +790,54 @@ $stats = $adminUserModel->getUserStatistics();
                                     </div>
                                 </td>
                             </tr>
+                            <!-- Comments Row (Hidden by default) -->
+                            <tr id="comments-row-<?php echo $post['id']; ?>" class="hidden bg-surface-container border-b border-surface-variant">
+                                <td colspan="7" class="px-8 py-6">
+                                    <div class="space-y-4">
+                                        <div class="flex items-center gap-3 mb-4">
+                                            <span class="material-symbols-outlined text-secondary text-lg">chat_bubble</span>
+                                            <h4 class="font-semibold text-on-surface">Comments for: <?php echo htmlspecialchars($post['titre_post']); ?></h4>
+                                            <span class="text-xs text-on-surface-variant">(<?php echo count($post['comments'] ?? []); ?> total)</span>
+                                        </div>
+                                        
+                                        <?php if (!empty($post['comments'])): ?>
+                                            <div class="space-y-3">
+                                                <?php foreach ($post['comments'] as $comment): ?>
+                                                <div class="bg-surface-container-lowest p-4 rounded-lg border border-surface-variant" id="comment-<?php echo $comment['id_commentaire']; ?>">
+                                                    <div class="flex justify-between items-start mb-2">
+                                                        <div>
+                                                            <p class="font-semibold text-on-surface text-sm"><?php echo htmlspecialchars($comment['nom_auteur']); ?></p>
+                                                            <p class="text-xs text-on-surface-variant"><?php echo date('M d, Y H:i', strtotime($comment['date_commentaire'])); ?></p>
+                                                        </div>
+                                                        <div class="flex items-center gap-2">
+                                                            <span class="inline-block px-2 py-1 bg-secondary/10 text-secondary rounded text-xs font-semibold">
+                                                                ID: <?php echo htmlspecialchars($comment['id_commentaire']); ?>
+                                                            </span>
+                                                            <button onclick="openEditCommentModal(<?php echo $comment['id_commentaire']; ?>, <?php echo $post['id']; ?>, '<?php echo htmlspecialchars($comment['contenu'], ENT_QUOTES); ?>', '<?php echo htmlspecialchars($comment['nom_auteur'], ENT_QUOTES); ?>')" class="p-2 text-primary hover:bg-primary/10 rounded transition-colors" title="Edit comment">
+                                                                <span class="material-symbols-outlined text-sm">edit</span>
+                                                            </button>
+                                                            <button onclick="deleteComment(<?php echo $comment['id_commentaire']; ?>, <?php echo $post['id']; ?>)" class="p-2 text-error hover:bg-error/10 rounded transition-colors" title="Delete comment">
+                                                                <span class="material-symbols-outlined text-sm">delete</span>
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                    <p class="text-on-surface-variant text-sm break-words comment-content-<?php echo $comment['id_commentaire']; ?>"><?php echo htmlspecialchars($comment['contenu']); ?></p>
+                                                </div>
+                                                <?php endforeach; ?>
+                                            </div>
+                                        <?php else: ?>
+                                            <div class="bg-surface-container-low rounded-lg p-6 text-center">
+                                                <span class="material-symbols-outlined text-on-surface-variant text-2xl mb-2 block">chat_bubble_outline</span>
+                                                <p class="text-on-surface-variant text-sm">No comments yet</p>
+                                            </div>
+                                        <?php endif; ?>
+                                    </div>
+                                </td>
+                            </tr>
                             <?php endforeach; ?>
                         <?php else: ?>
                             <tr>
-                                <td colspan="6" class="px-4 py-8 text-center text-on-surface-variant">
+                                <td colspan="7" class="px-4 py-8 text-center text-on-surface-variant">
                                     <p>No posts found</p>
                                 </td>
                             </tr>
@@ -1164,7 +1215,258 @@ $stats = $adminUserModel->getUserStatistics();
             });
         }
     }
+
+    /**
+     * Toggle comments visibility for a post
+     */
+    function toggleComments(postId) {
+        const commentsRow = document.getElementById('comments-row-' + postId);
+        if (commentsRow) {
+            commentsRow.classList.toggle('hidden');
+        }
+    }
+
+    /**
+     * Open the edit comment modal
+     */
+    function openEditCommentModal(commentId, postId, content, author) {
+        const modal = document.getElementById('editCommentModal');
+        document.getElementById('editCommentId').value = commentId;
+        document.getElementById('editPostId').value = postId;
+        document.getElementById('editCommentContent').value = content;
+        document.getElementById('editCommentAuthor').value = author;
+        document.getElementById('editCharCount').textContent = content.length;
+        modal.classList.remove('hidden');
+        document.getElementById('editCommentContent').focus();
+        
+        // Add keyboard support
+        document.addEventListener('keydown', handleModalKeydown);
+    }
+
+    /**
+     * Close the edit comment modal
+     */
+    function closeEditCommentModal() {
+        const modal = document.getElementById('editCommentModal');
+        modal.classList.add('hidden');
+        document.getElementById('editCommentForm').reset();
+        document.removeEventListener('keydown', handleModalKeydown);
+    }
+
+    /**
+     * Handle keyboard events in modal
+     */
+    function handleModalKeydown(e) {
+        if (e.key === 'Escape') {
+            closeEditCommentModal();
+        } else if (e.key === 'Enter' && e.ctrlKey) {
+            saveEditComment();
+        }
+    }
+
+    /**
+     * Update character count in edit modal
+     */
+    function updateEditCharCount() {
+        const content = document.getElementById('editCommentContent').value;
+        document.getElementById('editCharCount').textContent = content.length;
+    }
+
+    /**
+     * Save the edited comment
+     */
+    function saveEditComment() {
+        const commentId = document.getElementById('editCommentId').value;
+        const content = document.getElementById('editCommentContent').value.trim();
+        const author = document.getElementById('editCommentAuthor').value.trim();
+
+        // Validation
+        if (!content) {
+            alert('Comment content cannot be empty');
+            return;
+        }
+
+        if (content.length < 2) {
+            alert('Comment must be at least 2 characters');
+            return;
+        }
+
+        if (content.length > 5000) {
+            alert('Comment cannot exceed 5000 characters');
+            return;
+        }
+
+        // Show loading state
+        const saveBtn = document.querySelector('#editCommentModal button[onclick="saveEditComment()"]');
+        const originalText = saveBtn.textContent;
+        saveBtn.disabled = true;
+        saveBtn.textContent = 'Saving...';
+
+        // Send AJAX request
+        const formData = new FormData();
+        formData.append('contenu', content);
+        formData.append('nom_auteur', author);
+
+        fetch(`../../index.php?action=update_comment_${commentId}`, {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.text().then(text => {
+                try {
+                    return JSON.parse(text);
+                } catch (e) {
+                    console.error('Invalid JSON response:', text);
+                    throw new Error('Invalid JSON response from server');
+                }
+            });
+        })
+        .then(data => {
+            saveBtn.disabled = false;
+            saveBtn.textContent = originalText;
+
+            if (data.success) {
+                // Update the comment content on the page
+                const commentElement = document.querySelector('.comment-content-' + commentId);
+                if (commentElement) {
+                    commentElement.textContent = content;
+                }
+
+                // Close the modal
+                closeEditCommentModal();
+                
+                // Show success message
+                alert('Comment updated successfully!');
+            } else {
+                alert('Error: ' + (data.error || 'Failed to update comment'));
+            }
+        })
+        .catch(error => {
+            saveBtn.disabled = false;
+            saveBtn.textContent = originalText;
+            console.error('Error updating comment:', error);
+            alert('An error occurred while updating the comment: ' + error.message);
+        });
+    }
+
+    /**
+     * Delete a comment
+     */
+    function deleteComment(commentId, postId) {
+        if (!confirm('Are you sure you want to delete this comment?')) {
+            return;
+        }
+
+        // Show loading state
+        const deleteBtn = event.target.closest('button');
+        const originalHTML = deleteBtn.innerHTML;
+        deleteBtn.disabled = true;
+        deleteBtn.innerHTML = '<span class="material-symbols-outlined text-sm animate-spin">refresh</span>';
+
+        fetch(`../../index.php?action=delete_comment_${commentId}`, {
+            method: 'POST'
+        })
+        .then(response => {
+            // Check if response is OK
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            // Get response text first to debug
+            return response.text().then(text => {
+                try {
+                    return JSON.parse(text);
+                } catch (e) {
+                    console.error('Invalid JSON response:', text);
+                    throw new Error('Invalid JSON response from server');
+                }
+            });
+        })
+        .then(data => {
+            deleteBtn.disabled = false;
+            deleteBtn.innerHTML = originalHTML;
+
+            if (data.success) {
+                // Remove the comment from the DOM with animation
+                const commentElement = document.getElementById('comment-' + commentId);
+                if (commentElement) {
+                    commentElement.style.opacity = '0';
+                    commentElement.style.transform = 'translateX(-10px)';
+                    commentElement.style.transition = 'all 0.3s ease-out';
+                    
+                    setTimeout(() => {
+                        commentElement.remove();
+                        
+                        // Check if there are any comments left
+                        const postRow = document.querySelector(`tr[id^="comments-row-"]`);
+                        if (postRow) {
+                            const remainingComments = postRow.querySelectorAll('[id^="comment-"]').length;
+                            if (remainingComments === 0) {
+                                // Show "No comments yet" message
+                                const commentsContainer = postRow.querySelector('.space-y-3');
+                                if (commentsContainer) {
+                                    commentsContainer.innerHTML = '<div class="bg-surface-container-low rounded-lg p-6 text-center"><span class="material-symbols-outlined text-on-surface-variant text-2xl mb-2 block">chat_bubble_outline</span><p class="text-on-surface-variant text-sm">No comments yet</p></div>';
+                                }
+                            }
+                        }
+                    }, 300);
+                }
+                alert('Comment deleted successfully!');
+            } else {
+                alert('Error: ' + (data.error || 'Failed to delete comment'));
+            }
+        })
+        .catch(error => {
+            deleteBtn.disabled = false;
+            deleteBtn.innerHTML = originalHTML;
+            console.error('Error deleting comment:', error);
+            alert('An error occurred while deleting the comment: ' + error.message);
+        });
+    }
+
 </script>
+
+<!-- Edit Comment Modal -->
+<div id="editCommentModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50" onclick="if(event.target === this) closeEditCommentModal()">
+    <div class="bg-surface rounded-lg shadow-lg max-w-md w-full mx-4" onclick="event.stopPropagation()">
+        <div class="px-6 py-4 border-b border-surface-variant flex items-center justify-between">
+            <h3 class="text-lg font-semibold text-on-surface">Edit Comment</h3>
+            <button type="button" onclick="closeEditCommentModal()" class="text-on-surface-variant hover:text-on-surface">
+                <span class="material-symbols-outlined">close</span>
+            </button>
+        </div>
+        <form id="editCommentForm" class="p-6 space-y-4">
+            <input type="hidden" id="editCommentId" />
+            <input type="hidden" id="editPostId" />
+            
+            <div>
+                <label class="block text-sm font-medium text-on-surface mb-2">Author Name</label>
+                <input type="text" id="editCommentAuthor" disabled class="w-full px-4 py-2 border border-surface-variant rounded-lg bg-surface-container-low text-on-surface-variant text-sm" />
+                <p class="text-xs text-on-surface-variant mt-1">Author cannot be changed</p>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-on-surface mb-2">
+                    Comment Content
+                    <span class="text-on-surface-variant">(<span id="editCharCount">0</span>/5000)</span>
+                </label>
+                <textarea id="editCommentContent" oninput="updateEditCharCount()" maxlength="5000" rows="5" class="w-full px-4 py-2 border border-surface-variant rounded-lg bg-surface-container text-on-surface text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary" placeholder="Enter comment content..."></textarea>
+                <p class="text-xs text-on-surface-variant mt-1">Minimum 2 characters | Press Ctrl+Enter to save</p>
+            </div>
+
+            <div class="flex gap-3 justify-end pt-4">
+                <button type="button" onclick="closeEditCommentModal()" class="px-4 py-2 border border-surface-variant rounded-lg text-on-surface hover:bg-surface-container transition-colors">
+                    Cancel
+                </button>
+                <button type="button" onclick="saveEditComment()" class="px-4 py-2 bg-primary text-on-primary rounded-lg hover:bg-primary/90 transition-colors font-medium">
+                    Save Changes
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
 
 </body>
 </html>

@@ -93,6 +93,17 @@ function calculateBMI(height, weight) {
     return (weight / ((height / 100) ** 2)).toFixed(1);
 }
 
+/**
+ * Validate no 3+ consecutive identical characters
+ * @param text The text to validate
+ * @returns boolean true if valid, false if contains 3+ consecutive identical chars
+ */
+function hasNoConsecutiveChars(text) {
+    // Regex: (.) captures any character, \1{2,} matches that char repeated 2+ more times (total 3+)
+    const consecutiveRegex = /(.)\1{2,}/;
+    return !consecutiveRegex.test(text);
+}
+
 // ====================
 // LOGIN FORM VALIDATION
 // ====================
@@ -372,6 +383,63 @@ function validateContactForm() {
 }
 
 // ====================
+// COMMENT FORM VALIDATION
+// ====================
+
+function validateCommentForm() {
+    let isValid = true;
+    
+    // Get form field
+    const contenu = document.getElementById('comment-content-input')?.value.trim() || '';
+    
+    // Clear previous errors
+    const errorMsg = document.getElementById('comment-error-message');
+    if (errorMsg) {
+        errorMsg.style.display = 'none';
+        errorMsg.textContent = '';
+    }
+    
+    // Validate content
+    if (!contenu) {
+        const msg = 'Comment content is required';
+        if (errorMsg) {
+            errorMsg.textContent = msg;
+            errorMsg.style.display = 'block';
+        }
+        showValidationError('comment-content-input', msg);
+        isValid = false;
+    } else if (contenu.length < 2) {
+        const msg = 'Comment must be at least 2 characters';
+        if (errorMsg) {
+            errorMsg.textContent = msg;
+            errorMsg.style.display = 'block';
+        }
+        showValidationError('comment-content-input', msg);
+        isValid = false;
+    } else if (!hasNoConsecutiveChars(contenu)) {
+        const msg = 'Comment cannot contain 3+ identical consecutive characters (e.g., "jjj")';
+        if (errorMsg) {
+            errorMsg.textContent = msg;
+            errorMsg.style.display = 'block';
+        }
+        showValidationError('comment-content-input', msg);
+        isValid = false;
+    } else if (contenu.length > 2000) {
+        const msg = 'Comment must not exceed 2000 characters';
+        if (errorMsg) {
+            errorMsg.textContent = msg;
+            errorMsg.style.display = 'block';
+        }
+        showValidationError('comment-content-input', msg);
+        isValid = false;
+    } else {
+        clearValidationError('comment-content-input');
+    }
+    
+    return isValid;
+}
+
+// ====================
 // REAL-TIME VALIDATION
 // ====================
 
@@ -447,6 +515,21 @@ function initializeFormValidation() {
     setupEmailValidation('register-email');
     setupPasswordValidation('register-password');
     setupBMICalculation();
+    setupCommentCounter();
+}
+
+/**
+ * Setup comment character counter
+ */
+function setupCommentCounter() {
+    const commentInput = document.getElementById('comment-content-input');
+    const commentCounter = document.getElementById('comment-counter');
+    
+    if (commentInput && commentCounter) {
+        commentInput.addEventListener('input', function() {
+            commentCounter.textContent = this.value.length + '/2000';
+        });
+    }
 }
 
 // Run on page load

@@ -935,22 +935,8 @@
           </div>
           <div class="forum-sidebar-card">
             <h4>🏆 Top contributeurs</h4>
-            <div style="display:flex; flex-direction:column; gap:12px;">
-              <div style="display:flex; align-items:center; gap:12px;">
-                <div class="avatar" style="width:36px;height:36px;font-size:12px;background:linear-gradient(135deg,#F59E0B,#D97706)">MT</div>
-                <div style="flex:1"><strong style="font-size:14px">Marc Thibault</strong><br><span style="font-size:12px;color:var(--gray-400)">347 posts</span></div>
-                <span style="font-size:18px">🥇</span>
-              </div>
-              <div style="display:flex; align-items:center; gap:12px;">
-                <div class="avatar" style="width:36px;height:36px;font-size:12px;background:linear-gradient(135deg,#4CAF50,#2E7D32)">SA</div>
-                <div style="flex:1"><strong style="font-size:14px">Sophie Arnaud</strong><br><span style="font-size:12px;color:var(--gray-400)">289 posts</span></div>
-                <span style="font-size:18px">🥈</span>
-              </div>
-              <div style="display:flex; align-items:center; gap:12px;">
-                <div class="avatar" style="width:36px;height:36px;font-size:12px;background:linear-gradient(135deg,#1E3A8A,#2563EB)">KM</div>
-                <div style="flex:1"><strong style="font-size:14px">Karim Mensi</strong><br><span style="font-size:12px;color:var(--gray-400)">214 posts</span></div>
-                <span style="font-size:18px">🥉</span>
-              </div>
+            <div id="top-contributors-list" style="display:flex; flex-direction:column; gap:12px;">
+              <p style="text-align:center; color:#999; font-size:13px;">Chargement...</p>
             </div>
           </div>
         </div>
@@ -1124,22 +1110,31 @@
       <h3>Créer une nouvelle discussion</h3>
       <button class="btn-ghost" onclick="closePostModal()">✕</button>
     </div>
-    <div style="padding: 20px;">
-      <div class="form-group">
-        <label style="display: block; margin-bottom: 8px; font-weight: 600;">Titre de la discussion</label>
-        <input id="post-title-input" type="text" placeholder="Titre (max 50 caractères)" maxlength="50" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-family: inherit; font-size: 14px; box-sizing: border-box;">
-        <small style="display: block; margin-top: 4px; color: #999;" id="title-counter">0/50</small>
+    <form id="post-form" enctype="multipart/form-data">
+      <div style="padding: 20px;">
+        <div class="form-group">
+          <label style="display: block; margin-bottom: 8px; font-weight: 600;">Titre de la discussion</label>
+          <input id="post-title-input" type="text" placeholder="Titre (max 50 caractères)" maxlength="50" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-family: inherit; font-size: 14px; box-sizing: border-box;">
+          <small style="display: block; margin-top: 4px; color: #999;" id="title-counter">0/50</small>
+        </div>
+        <div class="form-group">
+          <label style="display: block; margin-bottom: 8px; font-weight: 600;">Contenu</label>
+          <textarea id="post-content-input" placeholder="Écris ton message ici... (max 500 caractères)" maxlength="500" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-family: inherit; font-size: 14px; min-height: 150px; box-sizing: border-box; resize: vertical;"></textarea>
+          <small style="display: block; margin-top: 4px; color: #999;" id="content-counter">0/500</small>
+        </div>
+        <div class="form-group">
+          <label style="display: block; margin-bottom: 8px; font-weight: 600;">�️ Joindre une image (optionnel)</label>
+          <input id="post-file-input" type="file" accept=".jpg,.jpeg,.png,.gif,.webp" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 6px; font-family: inherit; font-size: 13px; box-sizing: border-box;">
+          <small style="display: block; margin-top: 4px; color: #999;">Types acceptés: JPG, PNG, GIF, WEBP • Max 5MB</small>
+          <div id="file-error-message" style="display: none; color: #dc3545; font-size: 12px; margin-top: 6px;"></div>
+          <small style="display: block; margin-top: 4px; color: #666;" id="file-info"></small>
+        </div>
       </div>
-      <div class="form-group">
-        <label style="display: block; margin-bottom: 8px; font-weight: 600;">Contenu</label>
-        <textarea id="post-content-input" placeholder="Écris ton message ici... (max 500 caractères)" maxlength="500" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-family: inherit; font-size: 14px; min-height: 150px; box-sizing: border-box; resize: vertical;"></textarea>
-        <small style="display: block; margin-top: 4px; color: #999;" id="content-counter">0/500</small>
+      <div class="post-modal-actions">
+        <button type="button" class="btn-ghost" onclick="closePostModal()">Annuler</button>
+        <button type="button" class="btn-primary" onclick="submitPost()">Poster</button>
       </div>
-    </div>
-    <div class="post-modal-actions">
-      <button class="btn-ghost" onclick="closePostModal()">Annuler</button>
-      <button class="btn-primary" onclick="submitPost()">Poster</button>
-    </div>
+    </form>
   </div>
 </div>
 
@@ -1169,7 +1164,29 @@
   </div>
 </div>
 
-<script src="js/validation.js"></script>
-<script src="js/script.js"></script>
+<!-- MODAL POUR AJOUTER UN COMMENTAIRE -->
+<div class="post-modal-overlay" id="comment-modal-overlay">
+  <div class="post-modal">
+    <div class="post-modal-header">
+      <h3>Ajouter un commentaire</h3>
+      <button class="btn-ghost" onclick="closeCommentModal()">✕</button>
+    </div>
+    <div style="padding: 20px;">
+      <div class="form-group">
+        <label style="display: block; margin-bottom: 8px; font-weight: 600;">Votre commentaire</label>
+        <textarea id="comment-content-input" placeholder="Écris ton commentaire ici... (max 2000 caractères)" maxlength="2000" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-family: inherit; font-size: 14px; min-height: 120px; box-sizing: border-box; resize: vertical;"></textarea>
+        <small style="display: block; margin-top: 4px; color: #999;" id="comment-counter">0/2000</small>
+      </div>
+      <div id="comment-error-message" style="display: none; color: #dc3545; font-size: 14px; margin-bottom: 10px;"></div>
+    </div>
+    <div class="post-modal-actions">
+      <button class="btn-ghost" onclick="closeCommentModal()">Annuler</button>
+      <button class="btn-primary" onclick="submitComment()">Poster le commentaire</button>
+    </div>
+  </div>
+</div>
+
+<script src="js/validation.js?v=2.1"></script>
+<script src="js/script.js?v=3.2"></script>
 </body>
 </html>

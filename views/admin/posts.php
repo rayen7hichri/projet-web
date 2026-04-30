@@ -121,6 +121,7 @@
                         <th class="px-8 py-4 text-left text-sm font-semibold text-slate-600">Title</th>
                         <th class="px-8 py-4 text-left text-sm font-semibold text-slate-600">Author</th>
                         <th class="px-8 py-4 text-left text-sm font-semibold text-slate-600">Content Preview</th>
+                        <th class="px-8 py-4 text-left text-sm font-semibold text-slate-600">Comments</th>
                         <th class="px-8 py-4 text-left text-sm font-semibold text-slate-600">Created Date</th>
                         <th class="px-8 py-4 text-left text-sm font-semibold text-slate-600">Actions</th>
                     </tr>
@@ -144,6 +145,12 @@
                                 <p class="text-slate-600 text-sm max-w-sm truncate"><?php echo htmlspecialchars(substr($post['contenu_post'], 0, 60) . '...'); ?></p>
                             </td>
                             <td class="px-8 py-4">
+                                <button onclick="toggleComments(<?php echo $post['id']; ?>)" class="inline-flex items-center gap-2 px-3 py-1 bg-amber-100 text-amber-700 rounded-full text-sm font-semibold hover:bg-amber-200 transition-colors">
+                                    <span class="material-symbols-outlined text-sm">chat</span>
+                                    <span><?php echo count($post['comments'] ?? []); ?></span>
+                                </button>
+                            </td>
+                            <td class="px-8 py-4">
                                 <p class="text-slate-600 text-sm"><?php echo date('M d, Y H:i', strtotime($post['created_at'])); ?></p>
                             </td>
                             <td class="px-8 py-4">
@@ -157,10 +164,46 @@
                                 </div>
                             </td>
                         </tr>
+                        <!-- Comments Row (Hidden by default) -->
+                        <tr id="comments-row-<?php echo $post['id']; ?>" class="hidden bg-slate-50 border-b border-slate-100">
+                            <td colspan="7" class="px-8 py-6">
+                                <div class="space-y-4">
+                                    <div class="flex items-center gap-2 mb-4">
+                                        <span class="material-symbols-outlined text-amber-600">chat_bubble</span>
+                                        <h4 class="font-semibold text-slate-900">Comments for: <?php echo htmlspecialchars($post['titre_post']); ?></h4>
+                                        <span class="text-sm text-slate-500">(<?php echo count($post['comments'] ?? []); ?> total)</span>
+                                    </div>
+                                    
+                                    <?php if (!empty($post['comments'])): ?>
+                                        <div class="space-y-3">
+                                            <?php foreach ($post['comments'] as $comment): ?>
+                                            <div class="bg-white p-4 rounded-lg border border-slate-200">
+                                                <div class="flex justify-between items-start mb-2">
+                                                    <div>
+                                                        <p class="font-semibold text-slate-900"><?php echo htmlspecialchars($comment['nom_auteur']); ?></p>
+                                                        <p class="text-xs text-slate-500"><?php echo date('M d, Y H:i', strtotime($comment['date_commentaire'])); ?></p>
+                                                    </div>
+                                                    <span class="inline-block px-2 py-1 bg-amber-100 text-amber-700 rounded text-xs font-semibold">
+                                                        ID: <?php echo htmlspecialchars($comment['id_commentaire']); ?>
+                                                    </span>
+                                                </div>
+                                                <p class="text-slate-700 text-sm break-words"><?php echo htmlspecialchars($comment['contenu']); ?></p>
+                                            </div>
+                                            <?php endforeach; ?>
+                                        </div>
+                                    <?php else: ?>
+                                        <div class="bg-slate-100 rounded-lg p-6 text-center">
+                                            <span class="material-symbols-outlined text-slate-400 text-3xl mb-2 block">chat_bubble_outline</span>
+                                            <p class="text-slate-500">No comments yet</p>
+                                        </div>
+                                    <?php endif; ?>
+                                </div>
+                            </td>
+                        </tr>
                         <?php endforeach; ?>
                     <?php else: ?>
                         <tr>
-                            <td colspan="6" class="px-8 py-12 text-center">
+                            <td colspan="7" class="px-8 py-12 text-center">
                                 <p class="text-slate-500 text-lg">No posts found</p>
                             </td>
                         </tr>
@@ -215,6 +258,16 @@
 
 <script>
     let postToDelete = null;
+
+    /**
+     * Toggle comments visibility for a post
+     */
+    function toggleComments(postId) {
+        const commentsRow = document.getElementById('comments-row-' + postId);
+        if (commentsRow) {
+            commentsRow.classList.toggle('hidden');
+        }
+    }
 
     /**
      * Show delete confirmation modal

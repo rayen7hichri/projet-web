@@ -8,6 +8,12 @@
 ini_set('display_errors', 0);
 ini_set('log_errors', 1);
 
+// Ensure uploads/images directory exists
+$uploadsDir = __DIR__ . '/uploads/images';
+if (!is_dir($uploadsDir)) {
+    @mkdir($uploadsDir, 0755, true);
+}
+
 // Start session
 session_start();
 
@@ -53,7 +59,28 @@ if (strpos($action, 'register') === 0 || strpos($action, 'login') === 0) {
     } elseif (method_exists($controller, $action)) {
         $controller->$action();
     }
-} elseif (strpos($action, 'post') !== false || strpos($action, 'posts') !== false) {
+} elseif (strpos($action, 'comment') !== false || strpos($action, 'commentaire') !== false) {
+    require_once CONTROLLERS_PATH . 'CommentaireController.php';
+    $controller = new CommentaireController();
+    
+    // Map actions to controller methods
+    if (strpos($action, 'create_comment') === 0) {
+        $controller->create();
+    } elseif (strpos($action, 'get_comments_by_post') === 0) {
+        $controller->getByPost();
+    } elseif (strpos($action, 'get_comment_count') === 0) {
+        $controller->getCountByPost();
+    } elseif (strpos($action, 'update_comment_') === 0) {
+        $id = str_replace('update_comment_', '', $action);
+        $_POST['id'] = $id;
+        $controller->update($id);
+    } elseif (strpos($action, 'delete_comment_') === 0) {
+        $id = str_replace('delete_comment_', '', $action);
+        $controller->delete($id);
+    } elseif (method_exists($controller, $action)) {
+        $controller->$action();
+    }
+} elseif (strpos($action, 'post') !== false || strpos($action, 'posts') !== false || strpos($action, 'contributor') !== false) {
     require_once CONTROLLERS_PATH . 'PostController.php';
     $controller = new PostController();
     
@@ -62,6 +89,8 @@ if (strpos($action, 'register') === 0 || strpos($action, 'login') === 0) {
         $controller->create();
     } elseif (strpos($action, 'get_all_posts') === 0) {
         $controller->getAll();
+    } elseif (strpos($action, 'get_top_contributors') === 0) {
+        $controller->getTopContributors();
     } elseif (strpos($action, 'update_post_') === 0) {
         $id = str_replace('update_post_', '', $action);
         $_POST['id'] = $id;
