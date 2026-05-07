@@ -70,6 +70,9 @@ if (strpos($action, 'register') === 0 || strpos($action, 'login') === 0) {
         $controller->getByPost();
     } elseif (strpos($action, 'get_comment_count') === 0) {
         $controller->getCountByPost();
+    } elseif (strpos($action, 'moderate_comment_') === 0) {
+        $id = str_replace('moderate_comment_', '', $action);
+        $controller->moderate($id);
     } elseif (strpos($action, 'update_comment_') === 0) {
         $id = str_replace('update_comment_', '', $action);
         $_POST['id'] = $id;
@@ -116,6 +119,6 @@ if (strpos($action, 'register') === 0 || strpos($action, 'login') === 0) {
 } else {
     // Default: serve the main view
     header('Content-Type: text/html; charset=utf-8');
-    require_once VIEWS_PATH . 'index.html';
+    require_once VIEWS_PATH . 'front_office/index.html';
 }
 ?>
